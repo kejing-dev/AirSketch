@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ink violet (design appIcon #3D1F6B) lifted to 42 % lightness, same hue: Memory Palace already uses
+         #3B2A6B, and the design says to change lightness only on a clash. Registered in the factory icon notes. -->
+    <color name="ic_launcher_background">#FF5F30A6</color>
+</resources>

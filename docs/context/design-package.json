@@ -1,0 +1,1114 @@
+{
+  "appId": "air-sketch",
+  "name": "空中画笔 Air Sketch",
+  "nameZh": "空中画笔",
+  "nameEn": "Air Sketch",
+  "packageName": "io.embodit.airsketch",
+  "version": "design v1 · 2026-10-21",
+  "oneLiner": "一个放在桌边的小转台：捏住光点拖一下就画出一条立体的线，转过来接着画，画完让它一直摆在那儿。",
+  "oneLinerEn": "A little turntable on your desk: pinch the glowing nib and drag to draw a line in 3D, turn the base to keep drawing from another side, then leave the piece on your desk as a keepsake.",
+  "source": {
+    "pool": "state.json pool[air-sketch]（第 1 轮，score 4，五问 Q4 = false：3D 轨迹靠手柄或真机）；池文档 https://claude.ai/artifact/YCiPSR2LfnEgFRq4uVvJy1 §air-sketch",
+    "references": [
+      "Open Brush（icosa-foundation/open-brush，Apache-2.0；Tilt Brush 社区延续，Quest 4.2★/404 条，README 列出已上架 PICO）：笔触模型「按住画、松开断笔」、笔刷分类（实线 / 发光 / 扁平带 / 粗细随速度）、镜像对称、撤销重做、作品本地保存。名称避开 Tilt Brush 商标",
+      "Open Brush（Quest 商店页）：passthrough 下把客厅当画室；48 种笔刷（本应用只取 4 种）",
+      "A-Painter（aframevr/a-painter，MIT）：笔刷 API init / addPoint / tick；笔触数据 = 点位 + 朝向 + 压力 + 时间；.apa 存档思路 → 本应用的 strokes JSON（毫米量化）",
+      "SpatialJanga 叠木（kejing-dev/SpatialJanga）：体积窗口 + detectSpatialDragGesture + 体积内 AttachmentPanel + 存档快照的现成骨架"
+    ],
+    "port": {
+      "keep": [
+        "按住画、松开断笔的笔触模型（Open Brush / A-Painter）",
+        "4 种笔刷：墨线（实线管）· 霓虹（发光管）· 丝带（扁平带）· 速写（粗细随速度）",
+        "调色（12 色固定色板）、撤销 / 重做",
+        "镜像对称（Open Brush 的 Mirror，一键开关）",
+        "本地保存 + 作品架（Open Brush 的 Sketchbook 简化版）"
+      ],
+      "spatialize": [
+        "Open Brush 不做的形态：共享空间里一个桌边体积窗口，画完一直摆着，和别的窗口并存",
+        "笔触 = 捏住「笔尖」光点拖动；detectSpatialDragGesture 的 dragAmount 增量（含 z）推动笔尖，ECS 系统按笔尖轨迹生成管 / 带网格（MeshModel → MeshResource，尾段 replaceWithMeshModel）",
+        "转底座：拖底座边缘让整幅作品绕竖轴转——平面输入也能画出真正的立体作品（画一笔、转 90°、再画一笔）",
+        "调色盘在体积内的工具条上（体积窗口拿不到手 / 手柄的持续位姿，跟手调色盘做不了，见 reviewNotes R0-1）"
+      ],
+      "drop": [
+        "48 种笔刷 / 音频响应 / 粒子笔刷",
+        "Icosa 上传 / 分享 / 导出",
+        "多人",
+        "房间尺度全空间（v1 不进 Full Space）",
+        "橡皮擦（撤销覆盖主要需求；单条笔触点选需要逐条碰撞体，和合批冲突）",
+        "自由取色器 / 色轮（12 色固定色板，傻瓜式）",
+        "改作品名（要打字；自动命名）",
+        "丝带随手柄扭转（v1 砍，压工时）",
+        "音效（v1 砍，压工时）"
+      ]
+    },
+    "criticLocked": [
+      "立项条件（池文档风险 1）：给出 Open Brush 不做的形态——共享空间桌面摆件、与别的窗口并存。本包以「体积窗口 + 转底座 + 摆着看」兑现",
+      "命名避开 Tilt Brush 商标：应用名「空中画笔 / Air Sketch」",
+      "笔触网格分段合批（池文档风险 3）：松手后按笔刷合批，见 budget"
+    ]
+  },
+  "frame": {
+    "user": "喜欢随手画两笔的人、带孩子玩的家长、想试试「在空气里画画」的头显新用户；坐在桌前或沙发上，一次 5–15 分钟。",
+    "job": "在桌上画一个小小的立体作品（一朵花、一个签名、一个弹簧），转着看，然后让它一直摆在那儿。",
+    "whySpatial": "线条本身是三维轨迹：画完能绕着看、从缝里看进去；转一下底座就能从侧面接着画。2D 画布上只能得到一张图。",
+    "counterfactual2D": [
+      {
+        "affordance": "深度 / 绕看",
+        "flat": "平板上画的是平面图；3D 建模软件要切视图、点控制点，门槛高",
+        "spatial": "笔尖在体积里有真实的前后；转底座就是转作品，头一偏就有视差"
+      },
+      {
+        "affordance": "身体 / 手势",
+        "flat": "手指在玻璃上划，线只有 x、y",
+        "spatial": "捏住光点拖动，近处直接用手画时线跟着手在三维里走（真机）"
+      },
+      {
+        "affordance": "尺度 / 摆件",
+        "flat": "画完是一张截图",
+        "spatial": "画完是一件约 40 cm 高的小东西，把窗口挪到桌边，做别的事时它一直在那儿"
+      }
+    ],
+    "assumptions": [
+      {
+        "text": "只用「拖笔尖画 + 点点阵 / 底座换下笔处 + 拖底座转」几个动作，新用户 1 分钟内能画出第一件立体作品",
+        "confidence": "中",
+        "ifWrong": "首次引导再加一步演示（自动画一笔螺旋给他看），不加新控件"
+      },
+      {
+        "text": "眼手 / 手柄远距离拖动给出的 z 位移足够画出前后起伏（真机）",
+        "confidence": "低",
+        "ifWrong": "不影响 v1：转底座仍能画出立体作品；在 spike 结果里写 LIMITED，引导文案强调「转过来接着画」"
+      },
+      {
+        "text": "桌面尺度 16k 点 / 300 笔的上限对 5–15 分钟一幅够用",
+        "confidence": "中",
+        "ifWrong": "上限是常量，真机性能数据出来后调"
+      }
+    ]
+  },
+  "alternatives": [
+    {
+      "id": "A",
+      "name": "桌上转台速写（选中）",
+      "concept": "共享空间一个体积窗口：底座 + 笔尖光点 + 一条工具条；捏住笔尖拖动画线，拖底座转作品，画完收成摆件",
+      "signature": "笔尖光点：一颗随当前颜色发光的小球，捏住它就是握笔；松手它停在线的末端，像笔搁在纸上",
+      "risk": "体积窗口拿不到手 / 手柄持续位姿，落笔点只能靠笔尖 + 点点阵 / 拖影子；前后方向的手感只有真机能验",
+      "verdict": "选中：骨架 A 现成（叠木），模拟器除 z 向手感外全可验，兑现「Open Brush 不做的形态」"
+    },
+    {
+      "id": "B",
+      "name": "房间画室（Open Brush 原版）",
+      "concept": "Full Space · Mixed，整个房间是画布，跟手调色盘",
+      "signature": "人在画里走",
+      "risk": "和已上架 PICO 的 Open Brush 正面重叠；独占空间、不能当摆件；模拟器手不能沿 Z 走",
+      "verdict": "落选：池文档已把它放到 v2，且差异压力最大"
+    },
+    {
+      "id": "C",
+      "name": "分层画板（2.5D）",
+      "concept": "平面窗口里 5 张前后叠放的透明画层，每层用 2D 画，靠层间距出立体感",
+      "signature": "层层叠叠的透明纸",
+      "risk": "线还是平的，空间只剩「分层」；去掉空间几乎还成立",
+      "verdict": "落选：空间不承重（选品 B1）"
+    },
+    {
+      "id": "D",
+      "name": "描边临摹台",
+      "concept": "体积里给一个 3D 线稿模型，沿着它描",
+      "signature": "幽灵线稿",
+      "risk": "变成「描线练习」，创作自由没了；线稿资产要做",
+      "verdict": "落选：偏离「随手创作」；可作为 v2 的「描一描」模式"
+    }
+  ],
+  "archetype": "A",
+  "container": {
+    "type": "IN_VOLUME",
+    "space": "Shared Space：一个 Volumetric DefaultWindowContainer；房间由系统共享空间提供，应用不画环境、不用 passthrough / 锚点",
+    "windowModel": "single_panel_in_volume：体积内一块 AttachmentPanel（工具条；颜色与粗细 / 更多 / 设置 / 作品架 / 确认都在这一块里换内容或向上长高）+ 首次引导时笔尖旁一个小提示气泡 AttachmentPanel。不开第二个窗口，不用 Toolbar / TabBar / Subwindow 附件",
+    "size": {
+      "unit": "米",
+      "default": [
+        0.56,
+        0.62,
+        0.56
+      ],
+      "minScale": 0.8,
+      "maxScale": 1.6,
+      "note": "宽 × 高 × 深；WorldScale.Fixed、VolumeAlignment.Gravity、等比缩放、关闭材质背景（沿用叠木 manifest）。缩放交给系统窗口手柄（整幅作品连同体积一起变大变小），应用内不另做缩放"
+    },
+    "notes": [
+      "原点：体积底面中心，y 向上，+z 朝用户",
+      "作品坐标 = 底座局部坐标（跟底座一起转）；笔尖、落笔面、工具条用体积坐标（不转）",
+      "画区 = 底座上方圆柱 r 0.19 m、y 0.11–0.58 m；笔尖与所有点钳在画区内，保证任何实体都完整在体积内（SDK 6.1 pitfall：不要让物体部分越出 Volumetric 边界）",
+      "落笔面 = 过笔尖当前深度、以笔尖为圆心 Ø 0.32 m 的竖直圆形接点面（下沿不低于笔尖 y − 0.10，不跟底座转）；碰撞体和看得见的渐隐点阵一样大——亮着的地方才能点。点它 = 笔尖在这个深度上挪到点中处，没有视差。颜色与粗细 / 作品架 / 设置展开时落笔面碰撞体关掉，不和面板抢点击",
+      "笔尖的「影子」：底座顶面上笔尖正下方一个 Ø 4 cm 圆点（碰撞体 Ø 5 cm）。拖影子 = 笔尖前后左右挪（dragAmount 增量，高度不变），不依赖命中点、不会被落笔面挡；拖底座其它地方 = 转",
+      "工具条是体积内 AttachmentPanel（叠木同款），不是浮层对话框；确认做成工具条内联",
+      "这是共享空间窗口：应用拿不到桌面平面，不能自己「放到桌上」；首次引导最后提示一次「拖窗口下沿可以把它挪到桌边」"
+    ],
+    "permissions": [],
+    "lifecycle": "进入：读作品索引 → 打开上次那幅（上次在摆着看就回到摆着看）→ 首次启动进引导。每松手一笔：1 s 防抖存档。退后台 / 失焦：结束正在画的那一笔（当作松手）并立刻存档。关闭：释放网格与贴图资源、取消协程与存档任务。"
+  },
+  "referenceRepo": {
+    "primary": "GitHub kejing-dev/SpatialJanga（叠木 Tower Wood：Volumetric 窗口 manifest、detectSpatialDragGesture 抓取拖动、inputDevicePose、体积内 AttachmentPanel、存档快照）",
+    "secondary": "aframevr/a-painter（MIT）：笔刷接口 init / addPoint / tick 与笔触点数据结构；SDK 文档 dynamically-create-and-update-models（MeshModel / MeshResource.createWithMeshModel / replaceWithMeshModel）"
+  },
+  "input": {
+    "modes": [
+      "眼手：注视 + 捏合（默认）",
+      "手柄：射线 + 扳机",
+      "近场直接捏（体积拉近、手伸进画区时；真机）"
+    ],
+    "rule": "动作只有：捏住笔尖拖 = 画；点笔尖周围亮着的点阵 = 笔尖在同一深度上下左右挪；拖底座上的影子圆点 = 笔尖前后左右挪；拖底座其它地方 = 转作品（工具条上还有「转 90°」按钮兜底）。工具条上全是点一下。不需要双手、不需要打字。拖完 250 ms 内的点一下忽略（防「拖完松手触发点击」，沿用家具试摆 FitScene 的做法）。"
+  },
+  "spatialLayout": {
+    "units": "米，体积坐标，原点体积底面中心",
+    "base": "底座：圆盘 Ø 0.40 m、厚 2.5 cm，顶面 y = 0.10；石墨色哑光 + 外缘一圈 24 道刻度；整个底座（顶面 + 侧面）都有碰撞体：左右拖 = 转",
+    "drawZone": "圆柱 r 0.19 m，y 0.11–0.58 m（底座局部坐标）；超出的点钳回边界",
+    "nib": "笔尖：发光小球（当前颜色，Unlit），直径随粗细 1.8 / 2.4 / 3.0 cm + 外圈 Ø 4 cm 白色细环（加亮；SDK 若能关深度测试就关，保证被作品挡住时也看得见）；碰撞体球 Ø 6 cm；空闲时 2 s 一次轻呼吸",
+    "mirrorPlane": "对称面：底座局部 x = 0 的竖直面（跟底座一起转），开时显示 6% 白色面 + 两条边线",
+    "toolbar": "工具条 AttachmentPanel：0.52 × 0.085 m（约 640 × 104 dp），中心 (0, 0.05, 0.25)，向后仰 15°；颜色与粗细、设置展开时向上长高，下沿不动；作品架 0.52 × 0.17 m",
+    "hintBubble": "引导气泡：0.17 × 0.04 m，默认在笔尖上方 6 cm、朝用户偏 3 cm（在落笔面前面，× 不被抢）；笔尖 y > 0.50 时放到笔尖下方；x 钳在 ±0.19 内，始终在体积里",
+    "displayPill": "摆着看小签：0.15 × 0.035 m，工具条原位置",
+    "viewpoints": "设计视距 0.8–1.2 m；体积默认摆在桌面上、眼睛略高于作品顶",
+    "touchPlane": "落笔面：以笔尖为圆心、z = 笔尖 z 的竖直圆 Ø 0.32 m（下沿 ≥ 笔尖 y − 0.10，裁在 y 0.11–0.58 内）；点中 (x, y) → 笔尖 0.15 s 缓动到 (x, y, 笔尖 z)；碰撞体 = 可见点阵",
+    "nibShadow": "笔尖影子：笔尖正下方底座顶面上 Ø 4 cm 淡圆点（碰撞体 Ø 5 cm，HoverEffect 高亮）+ 一条 15% 竖虚线连到笔尖；拖影子 = 前后左右挪笔尖",
+    "boundGlow": "画区边界提示：笔尖被钳在边界上时，那一处圆柱面亮一圈 interaction 色细环 0.3 s"
+  },
+  "brushes": [
+    {
+      "id": "ink",
+      "zh": "墨线",
+      "en": "Ink",
+      "mesh": "圆管 6 边，等粗",
+      "material": "PhysicallyBasedMaterial 哑光（roughness 0.7）",
+      "look": "像细钢丝 / 毛线，最稳"
+    },
+    {
+      "id": "neon",
+      "zh": "霓虹",
+      "en": "Neon",
+      "mesh": "圆管 6 边，等粗",
+      "material": "UnlitMaterial，颜色提亮 15%",
+      "look": "不受光照，像灯管"
+    },
+    {
+      "id": "ribbon",
+      "zh": "丝带",
+      "en": "Ribbon",
+      "mesh": "扁平带，2 三角 / 段，双面，宽 = 粗细 × 2.5",
+      "material": "PhysicallyBasedMaterial 半光（roughness 0.4）",
+      "look": "带面朝向：起笔那一刻正对体积前方（转过底座后画的丝带朝向不同，所以也能画出立体）；v1 不做随手柄扭转"
+    },
+    {
+      "id": "taper",
+      "zh": "速写",
+      "en": "Sketch",
+      "mesh": "圆管 6 边，半径随速度：慢 = 粗 ×1.4、快 = 细 ×0.5，两端各 1 cm 收尖",
+      "material": "PhysicallyBasedMaterial 哑光",
+      "look": "像真的笔，起笔收笔有锋"
+    }
+  ],
+  "sizes": {
+    "rule": "三档粗细（直径）：细 3 mm · 中 6 mm · 粗 12 mm；默认中",
+    "unitNote": "直径按底座局部坐标，跟体积缩放一起变"
+  },
+  "colors": [
+    {
+      "id": "ink",
+      "zh": "墨黑",
+      "en": "Ink black",
+      "hex": "#1D1D24",
+      "note": "墨黑在石墨色底座上看不清，不做默认"
+    },
+    {
+      "id": "snow",
+      "zh": "雪白",
+      "en": "Snow",
+      "hex": "#F4F1EA"
+    },
+    {
+      "id": "vermilion",
+      "zh": "朱红",
+      "en": "Vermilion",
+      "hex": "#E5483B"
+    },
+    {
+      "id": "orange",
+      "zh": "橘",
+      "en": "Orange",
+      "hex": "#F28C28"
+    },
+    {
+      "id": "lemon",
+      "zh": "柠黄",
+      "en": "Lemon",
+      "hex": "#F5D33F"
+    },
+    {
+      "id": "leaf",
+      "zh": "嫩绿",
+      "en": "Leaf",
+      "hex": "#8BD346"
+    },
+    {
+      "id": "teal",
+      "zh": "青绿",
+      "en": "Teal",
+      "hex": "#2EC4A6"
+    },
+    {
+      "id": "sky",
+      "zh": "天蓝",
+      "en": "Sky",
+      "hex": "#3FA7F5"
+    },
+    {
+      "id": "ultramarine",
+      "zh": "群青",
+      "en": "Ultramarine",
+      "hex": "#3E5BDB"
+    },
+    {
+      "id": "violet",
+      "zh": "紫",
+      "en": "Violet",
+      "hex": "#8E5BE8"
+    },
+    {
+      "id": "pink",
+      "zh": "粉",
+      "en": "Pink",
+      "hex": "#F06BAA"
+    },
+    {
+      "id": "walnut",
+      "zh": "胡桃棕",
+      "en": "Walnut",
+      "hex": "#9A6B4A"
+    }
+  ],
+  "strokeRules": {
+    "sampling": "笔尖每移动 ≥ 3 mm（底座局部）记一个点；点 = (x, y, z, 半径)；指数平滑 α = 0.5 去抖；松手时 Catmull-Rom 重采样到 4 mm 间距",
+    "dragMapping": "dragAmount 是逐事件增量（叠木 / 空间尺 spike 的 SpikeWorld.kt 同样按增量累加）：每个事件换成米（PhysicalLengthConverter），y 取反，再除以当前体积缩放，加到笔尖上；最后按底座当前 yaw 换算到底座局部坐标记点",
+    "minStroke": "少于 3 个点（拖动 < 9 mm）的一笔不保存，当作没画",
+    "mirror": "对称开时每个点同时生成 x 取反的镜像点，两条线算一笔（一次撤销一起撤）",
+    "limits": "每幅 ≤ 300 笔、≤ 16 000 点（对称生成的镜像点也算在内）；到上限进 S16",
+    "live": "正在画的一笔只有两个实体：主体（每 64 点重建一次）+ 尾段（每帧最多一次 replaceWithMeshModel）；对称时再加一组镜像，共 ≤ 4 个",
+    "bake": "松手后把这一笔合并进「同笔刷」的合批网格（单个合批 ≤ 60k 顶点，uint16 索引够用；满了另开一个，每种笔刷 1–2 批）；颜色走每种笔刷一张 12×1 调色板贴图 + uv0 取色（MeshModel 有 uv0），不依赖顶点色，所以合批数只跟笔刷有关；撤销 = 从合批里删掉这一笔的顶点区间后重建该合批",
+    "clamp": "笔尖到画区边界就停在边界上，越界部分不累积；手往回拖一离开边界马上跟上。钳在边界上时不记点（这一笔暂停），边界亮一圈提示",
+    "nibAfter": "松手：笔尖停在线的末端。撤销：笔尖回到剩下最后一笔的末端（没有笔就回默认位置）。打开作品 / 新画：笔尖在 (0, 0.34, 0.10)，在作品前面、一定看得见"
+  },
+  "panels": [
+    {
+      "id": "toolbar",
+      "name": "工具条 Toolbar",
+      "surface": "体积内 AttachmentPanel，底座前下方，向后仰 15°",
+      "sizeDp": {
+        "default": [
+          640,
+          104
+        ]
+      },
+      "physicalM": [
+        0.52,
+        0.085
+      ],
+      "material": "Material.Regular 玻璃（系统默认）",
+      "content": "一行从左到右：笔刷四选一（文字分段：墨线 / 霓虹 / 丝带 / 速写）｜当前颜色圆点（圆点大小 = 粗细，点开「颜色与粗细」）｜对称开关｜转 90°｜撤销｜重做｜更多 ⋯",
+      "states": [
+        "S03",
+        "S05",
+        "S07",
+        "S09"
+      ],
+      "densityCap": "1 行，1 个分段 + 6 个图标键，每个 ≥ 40 dp 高"
+    },
+    {
+      "id": "palette",
+      "name": "颜色与粗细 Color & Size",
+      "surface": "工具条向上长高，上半部 2 行 × 6 色",
+      "sizeDp": {
+        "default": [
+          640,
+          272
+        ]
+      },
+      "physicalM": [
+        0.52,
+        0.22
+      ],
+      "content": "上：粗细三选一（细 / 中 / 粗）；中：12 个圆色块 2 行 × 6，当前色带描边；下：工具条那一行照旧。点色块 = 换色并收起；点粗细不收起；再点圆点或开始画 = 收起",
+      "states": [
+        "S06"
+      ]
+    },
+    {
+      "id": "menu",
+      "name": "更多 Menu",
+      "surface": "工具条整行换成一行按钮（不长高，不挡作品）",
+      "content": "← 返回 · 新画一幅 · 作品架 · 摆着看 · 清空（这一幅没画时灰掉）· 设置；英文用短词 New / Gallery / Display / Clear / Settings，放不下时「设置」收成图标",
+      "states": [
+        "S10"
+      ]
+    },
+    {
+      "id": "confirm",
+      "name": "确认条 Confirm",
+      "surface": "工具条内联，替换整行（不用浮层对话框）",
+      "content": "一句话 + [取消] [确定]；只用于：清空这幅、删除作品",
+      "states": [
+        "S11",
+        "S13"
+      ]
+    },
+    {
+      "id": "gallery",
+      "name": "作品架 Gallery",
+      "surface": "工具条换成作品架，0.52 × 0.17 m（遮住作品底部一小截，可接受）",
+      "sizeDp": {
+        "default": [
+          640,
+          208
+        ]
+      },
+      "content": "标题 + [完成]；一行可横向滑动的卡片：最近 6 幅自己的作品（按更新时间新的在前）+ 3 幅示例；卡上：名字「画 3 · 10月21日」+ 笔数 + 用过的颜色色条。点一张 = 立刻在底座上换成这一幅（就是打开，不另做预览），作品架不收，可以接着点别的；底部：[删除这幅]（示例灰掉）[新画一幅]。没有自己的作品时第一张是虚线卡「还没有作品，新画一幅吧」",
+      "states": [
+        "S12"
+      ]
+    },
+    {
+      "id": "hint",
+      "name": "引导气泡 Hint",
+      "surface": "笔尖上方小 AttachmentPanel",
+      "physicalM": [
+        0.17,
+        0.04
+      ],
+      "content": "第 1 句「捏住光点，拖一下」→ 画完第一笔后第 2 句「点亮着的点，或拖底座上的影子，换个地方下笔」→ 挪过一次后第 3 句「拖底座转过来，接着画」→ 转过一次后第 4 句「拖窗口下沿，可以把它挪到桌边」4 s 后收起。气泡右侧一个小 × = 跳过引导",
+      "states": [
+        "S02"
+      ]
+    },
+    {
+      "id": "pill",
+      "name": "摆着看小签 Display Pill",
+      "surface": "工具条缩成的小签",
+      "sizeDp": {
+        "default": [
+          184,
+          44
+        ]
+      },
+      "physicalM": [
+        0.15,
+        0.035
+      ],
+      "content": "「✎ 接着画」一个按钮",
+      "states": [
+        "S14"
+      ]
+    },
+    {
+      "id": "settings",
+      "name": "设置 Settings",
+      "surface": "工具条向上长高，同一块面板换内容",
+      "content": "语言：跟随系统 / 中文 / English（分段）；摆着看时慢慢转 开/关（默认开）；关于（版本、参照与许可：Open Brush Apache-2.0、A-Painter MIT）",
+      "states": [
+        "S15"
+      ]
+    },
+    {
+      "id": "notice",
+      "name": "提示条 Notice",
+      "surface": "工具条内联，替换整行",
+      "content": "S16「这幅画满了，新开一幅接着画吧」+ 撤销 + [摆着看] [新画一幅]；S17「这幅画没打开」+ 原因一行 + [重试] [新画一幅]",
+      "states": [
+        "S16",
+        "S17"
+      ]
+    }
+  ],
+  "entities3d": [
+    {
+      "id": "base",
+      "what": "底座圆盘 + 刻度环（程序生成网格，1 次绘制）+ 覆盖顶面与侧面的碰撞体 + InteractableComponent + HoverEffectComponent",
+      "count": 1
+    },
+    {
+      "id": "nib",
+      "what": "笔尖：Unlit 发光球 + 白色细环 + 球形碰撞体 Ø 6 cm + InteractableComponent + HoverEffectComponent；颜色 = 当前颜色",
+      "count": 1
+    },
+    {
+      "id": "touchPlane",
+      "what": "落笔面：以笔尖为圆心 Ø 0.32 m 的竖直圆形碰撞体 + 同样大的渐隐点阵面（12%），跟笔尖走",
+      "count": 1
+    },
+    {
+      "id": "nibShadow",
+      "what": "笔尖影子：底座顶面上的圆点（碰撞体 Ø 5 cm，可拖）+ 竖虚线；挂在体积下，不跟底座转",
+      "count": 1
+    },
+    {
+      "id": "liveStroke",
+      "what": "正在画的一笔：主体 + 尾段两个实体（对称时再来一组）",
+      "count": "2–4"
+    },
+    {
+      "id": "batch",
+      "what": "已画笔触合批网格：每种笔刷 1–N 个（调色板贴图 + uv0 取色）",
+      "count": "通常 4，≤ 8"
+    },
+    {
+      "id": "mirrorPlane",
+      "what": "对称面：6% 白色薄面 + 两条边线，挂在底座下",
+      "count": 1
+    }
+  ],
+  "budget": {
+    "drawCalls": "合批 ≤ 8 + 正在画 ≤ 4 + 底座 1 + 笔尖 2 + 投影 2 + 点阵 1 + 对称面 1 + 面板 ≤ 2 ≈ ≤ 21",
+    "triangles": "16k 点 × 管 6 边 × 2 ≈ 192k 上限（丝带 2 三角 / 段更少）；超过性能线就把上限点数调低，不改结构",
+    "textures": "落笔面点阵 64×64 一张 + 每种笔刷一张 12×1 调色板（霓虹那张提亮 15%）",
+    "models": "无外部模型；全部程序生成；3 幅示例是 strokes JSON（各 ≤ 40 KB）",
+    "audio": "无（v1 砍掉音效，压工时）"
+  },
+  "samples": [
+    {
+      "id": "spring",
+      "zh": "弹簧",
+      "en": "Spring",
+      "what": "一条霓虹螺旋从底座升到顶，3 圈，青绿",
+      "why": "一眼看出「线是立体的」"
+    },
+    {
+      "id": "tree",
+      "zh": "小树",
+      "en": "Little tree",
+      "what": "胡桃棕速写树干 + 分叉 + 嫩绿 / 柠黄墨线树冠小圈，对称开着画",
+      "why": "示范对称 + 速写笔刷"
+    },
+    {
+      "id": "orbit",
+      "zh": "星环",
+      "en": "Orbit",
+      "what": "三条倾斜的群青 / 紫 / 粉丝带圆环交叉，中心一颗柠黄霓虹小星",
+      "why": "示范丝带 + 转底座从不同方向画"
+    }
+  ],
+  "states": [
+    {
+      "id": "S01",
+      "name": "加载 Loading",
+      "reach": "启动",
+      "scene": "底座出现；无笔尖",
+      "panel": "工具条位置显示「正在铺纸…」+ 细进度条",
+      "qaCapture": "启动 1 s 内截",
+      "exits": [
+        "读完 → S02（首次）/ S03（空画布）/ S05（上次那幅有画）",
+        "存档坏了 → S17"
+      ]
+    },
+    {
+      "id": "S02",
+      "name": "首次引导 First Stroke",
+      "reach": "首次启动（引导没走完）",
+      "scene": "空画布 + 笔尖周围点阵（引导第 2 步期间点阵一直亮，不随画隐去）；笔尖呼吸加快",
+      "panel": "工具条正常；笔尖旁气泡依次三句 + ×（跳过）",
+      "qaCapture": "清数据后首次启动截；画完第一笔后截第 2 句；点一次点阵后截第 3 句；转一次后截第 4 句",
+      "exits": [
+        "三句都走完 → S05（工具条消息行提示一次「拖窗口下沿可以把它挪到桌边」）",
+        "点 × 或打开更多 → 结束引导"
+      ]
+    },
+    {
+      "id": "S03",
+      "name": "空画布 Empty",
+      "reach": "新画一幅 / 清空后 / 引导已走完且这幅没画",
+      "scene": "底座 + 笔尖在 (0, 0.34, 0.10) + 笔尖周围点阵 + 底座上的笔尖影子",
+      "panel": "工具条；撤销、重做灰掉",
+      "qaCapture": "菜单「新画一幅」后截",
+      "exits": [
+        "捏住笔尖拖 → S04",
+        "点点阵 / 拖影子 → 笔尖挪过去（仍 S03）",
+        "拖底座 / 转 90° → S08"
+      ]
+    },
+    {
+      "id": "S04",
+      "name": "画着 Drawing",
+      "reach": "捏住笔尖开始拖",
+      "scene": "线从笔尖后面长出来；笔尖外环变成当前色；点阵隐去（引导第 2 步除外）；碰到画区边界时停记点并亮边",
+      "panel": "工具条变暗 60%（不能点），防误触",
+      "qaCapture": "debug stroke helix 进行到一半截（debug 注入轨迹走同一条管线）",
+      "exits": [
+        "松手 → S05（不够 3 点 → 回原状态）",
+        "到上限 → S16",
+        "失焦 → 当作松手 → S05"
+      ]
+    },
+    {
+      "id": "S05",
+      "name": "有画·空闲 Idle",
+      "reach": "松手 / 打开有画的作品 / 收起任何展开",
+      "scene": "作品 + 笔尖停在上一笔末端",
+      "panel": "工具条全亮；撤销可点",
+      "qaCapture": "debug seed sample spring 后截",
+      "exits": [
+        "拖笔尖 → S04",
+        "点点阵 / 拖影子 → 挪笔尖",
+        "拖底座 / 转 90° → S08",
+        "圆点 → S06",
+        "对称 → 叠加 S07",
+        "撤销 → 叠加 S09",
+        "更多 → S10"
+      ]
+    },
+    {
+      "id": "S06",
+      "name": "颜色与粗细 Color & Size",
+      "reach": "点工具条上的颜色圆点",
+      "panel": "工具条长高：粗细三选一 + 2 × 6 色块，当前色描边",
+      "qaCapture": "展开后截",
+      "exits": [
+        "点一个色 → 换色、笔尖变色、收起",
+        "点粗细 → 圆点与笔尖变大小，不收起",
+        "再点圆点 / 开始拖笔尖 / 拖影子 / 拖底座 → 收起（3D 手势照常生效；展开期间落笔面不接点击）"
+      ]
+    },
+    {
+      "id": "S07",
+      "name": "对称（标记态）Mirror",
+      "reach": "点对称开关；是叠加在 S03 / S05 上的开关，不是独立页面，那两态的所有出口照常",
+      "scene": "对称面出现（跟底座转）；画一笔另一边同时长出镜像",
+      "panel": "对称图标高亮",
+      "qaCapture": "开对称后 debug stroke zigzag 截",
+      "exits": [
+        "再点一次 → 关",
+        "其它同 S03 / S05"
+      ]
+    },
+    {
+      "id": "S08",
+      "name": "转底座 Turning",
+      "reach": "左右拖底座（顶面或侧面）/ 点工具条「转 90°」",
+      "scene": "整幅作品 + 对称面跟着转；刻度环高亮；笔尖、落笔面、影子不动",
+      "panel": "不变",
+      "qaCapture": "点转 90° 一次后截（侧面看作品）；debug yaw 45 再截一张",
+      "exits": [
+        "松手 → 停在当前角度（无吸附）→ 原状态",
+        "转 90° 按钮：0.3 s 转到下一档 90°"
+      ]
+    },
+    {
+      "id": "S09",
+      "name": "撤销后（标记态）Undone",
+      "reach": "点撤销；叠加在 S03 / S05 上，只表示重做可点",
+      "scene": "最后一笔 0.2 s 淡出；笔尖回到剩下最后一笔的末端",
+      "panel": "重做可点",
+      "qaCapture": "seed spring + 画一笔 + 撤销后截",
+      "exits": [
+        "重做 → 那一笔回来",
+        "画新一笔 → 重做栈清空 → S05"
+      ]
+    },
+    {
+      "id": "S10",
+      "name": "更多 Menu",
+      "reach": "点 ⋯",
+      "panel": "工具条整行换成：← · 新画一幅 · 作品架 · 摆着看 · 清空 · 设置",
+      "qaCapture": "展开后截",
+      "exits": [
+        "新画一幅 → 存好当前 → S03",
+        "作品架 → S12",
+        "摆着看 → S14",
+        "清空 → S11",
+        "设置 → S15",
+        "← → 收起"
+      ],
+      "scene": "笔尖、点阵隐藏（不能画、不能点）；底座仍可拖转"
+    },
+    {
+      "id": "S11",
+      "name": "确认清空 Confirm Clear",
+      "reach": "更多·清空这幅",
+      "panel": "「清空这幅？画过的 23 笔都会擦掉」+ [取消] [清空]",
+      "qaCapture": "截确认条",
+      "exits": [
+        "清空 → S03（同一幅，存档清掉）",
+        "取消 → S05"
+      ],
+      "scene": "笔尖、点阵隐藏；底座不能拖"
+    },
+    {
+      "id": "S12",
+      "name": "作品架 Gallery",
+      "reach": "更多·作品架",
+      "scene": "底座上就是当前选中的那一幅（点卡片即打开）；笔尖、点阵隐藏；底座可拖转",
+      "panel": "一行横滑卡片（最近 6 幅自己的 + 3 幅示例）+ [删除这幅] [新画一幅] + [完成]；没有自己的作品时第一张是虚线卡",
+      "qaCapture": "默认截；点「星环」示例再截一张",
+      "exits": [
+        "点卡片 → 底座上换成那一幅（示例先只看，画下第一笔时才复制成新作品）",
+        "删除这幅 → S13",
+        "新画一幅 → S03",
+        "完成 → S05 / S03（停在最后点的那一幅）"
+      ]
+    },
+    {
+      "id": "S13",
+      "name": "确认删除 Confirm Delete",
+      "reach": "作品架·删除",
+      "panel": "「删掉「画 3」？删了找不回来」+ [取消] [删除]",
+      "qaCapture": "截确认条",
+      "exits": [
+        "删除 → S12（底座换成下一幅；没有了就是空画布）",
+        "取消 → S12"
+      ],
+      "scene": "预览不动；底座不能拖"
+    },
+    {
+      "id": "S14",
+      "name": "摆着看 Display",
+      "reach": "更多·摆着看 / 满了时「摆着看」/ 上次退出时在摆着看",
+      "scene": "只剩底座和作品；笔尖、点阵、影子、对称面隐藏；设置开着时 40 s 一圈慢转",
+      "panel": "工具条缩成小签「✎ 接着画」",
+      "qaCapture": "截全景；debug yaw 180 再截一张",
+      "exits": [
+        "接着画 → S05",
+        "拖底座 → 手动转（慢转停 10 s）"
+      ]
+    },
+    {
+      "id": "S15",
+      "name": "设置 Settings",
+      "reach": "更多·设置",
+      "panel": "语言分段 + 慢转开关 + 关于",
+      "qaCapture": "截设置；切 English 后截工具条与菜单",
+      "exits": [
+        "返回 → 上一态"
+      ],
+      "scene": "笔尖、点阵隐藏；底座不能拖"
+    },
+    {
+      "id": "S16",
+      "name": "画满了 Full",
+      "reach": "这幅到 300 笔或 16 000 点",
+      "panel": "提示条「这幅画满了，新开一幅接着画吧」+ [新画一幅] [摆着看]",
+      "qaCapture": "debug fill 后截",
+      "exits": [
+        "新画一幅 → S03",
+        "摆着看 → S14",
+        "撤销 → 到上限以下自动回 S05"
+      ],
+      "scene": "笔尖、点阵隐藏（不能再画）；底座可拖转"
+    },
+    {
+      "id": "S17",
+      "name": "打不开 Load Error",
+      "reach": "作品文件缺失 / 解析失败",
+      "panel": "提示条「这幅画没打开」+ 原因一行 + [重试] [新画一幅]",
+      "qaCapture": "debug corruptSave 后重启截",
+      "exits": [
+        "重试 → S01",
+        "新画一幅 → S03"
+      ],
+      "scene": "底座空着"
+    }
+  ],
+  "interactions": [
+    {
+      "id": "T1",
+      "name": "拖笔尖画线",
+      "from": "S03|S05|S06（含对称、撤销后标记态）",
+      "to": "S04",
+      "trigger": "detectSpatialDragGesture 目标 = 笔尖；dragAmount 增量 → 米 → ÷ 体积缩放 → 加到笔尖（钳画区）→ 底座局部记点；采样、平滑、生成网格见 strokeRules",
+      "confirm": false,
+      "verify": "平面内画线：模拟器可验证；前后（z）起伏与远距离手感：真机依赖"
+    },
+    {
+      "id": "T2",
+      "name": "点点阵 / 拖影子挪笔尖",
+      "from": "S03|S05|S06",
+      "to": "同态",
+      "trigger": "点点阵：detectSpatialTapGesture 目标 = 落笔面，SpatialTapValue.position（视图局部 px）→ 米 → 笔尖到 (x, y, 笔尖 z)。拖影子：detectSpatialDragGesture 目标 = 影子圆点，dragAmount 增量的 x、z（÷ 体积缩放）→ 笔尖前后左右，高度不变，钳在画区。拖完 250 ms 内的点一下忽略",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T3",
+      "name": "转底座",
+      "from": "S03|S05|S06|S10|S12|S14|S16",
+      "to": "S08",
+      "trigger": "拖底座（影子圆点以外）：横向 dragAmount 每 0.30 m（÷ 体积缩放后）转 180°；松手停在原角度。工具条「转 90°」：0.3 s 转到下一档",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T4",
+      "name": "选笔刷 / 粗细",
+      "from": "S03|S05|S06",
+      "to": "同态",
+      "trigger": "工具条笔刷分段、颜色与粗细里的粗细分段；只影响下一笔",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T5",
+      "name": "换颜色",
+      "from": "S06",
+      "to": "原状态",
+      "trigger": "点色块；笔尖立即变色",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T6",
+      "name": "对称开关",
+      "from": "S03|S05",
+      "to": "叠加 S07",
+      "trigger": "开关；只影响之后的笔",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T7",
+      "name": "撤销 / 重做",
+      "from": "S03|S05|S16",
+      "to": "叠加 S09",
+      "trigger": "撤销栈 = 本幅全部笔（跨重启保留）；新的一笔清空重做栈；撤销后笔尖回到剩下最后一笔的末端",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T8",
+      "name": "新画 / 清空",
+      "from": "S10",
+      "to": "S03|S11",
+      "trigger": "新画：存好当前、开新的；清空：确认后清本幅",
+      "confirm": true,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T9",
+      "name": "作品架打开 / 删除",
+      "from": "S12",
+      "to": "S05|S13",
+      "trigger": "点卡片即在底座上打开那一幅；示例先只看，画下第一笔才复制成新作品；空作品不进索引；删除要确认",
+      "confirm": true,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T10",
+      "name": "摆着看 / 接着画",
+      "from": "S10",
+      "to": "S14",
+      "trigger": "工具条缩成小签；慢转按设置",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T11",
+      "name": "自动保存与恢复",
+      "from": "*",
+      "to": "S05",
+      "trigger": "松手 1 s 防抖存；退后台立即存；force-stop 后重开回到这幅、底座角度、对称开关、笔刷与颜色、是否在摆着看都在",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T12",
+      "name": "切语言",
+      "from": "S15",
+      "to": "S15",
+      "trigger": "分段控件；作品名、示例名、所有提示中英两版",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    },
+    {
+      "id": "T14",
+      "name": "近场直接画",
+      "from": "S03|S05",
+      "to": "S04",
+      "trigger": "手伸进画区直接捏住笔尖拖：同 T1，z 跟手",
+      "confirm": false,
+      "verify": "真机依赖"
+    },
+    {
+      "id": "T15",
+      "name": "防抖手感",
+      "from": "S04",
+      "to": "S04",
+      "trigger": "指数平滑 α 与采样间距在真机上调",
+      "confirm": false,
+      "verify": "真机依赖"
+    },
+    {
+      "id": "T16",
+      "name": "跳过引导",
+      "from": "S02",
+      "to": "S03|S05",
+      "trigger": "气泡上的 ×，或打开更多",
+      "confirm": false,
+      "verify": "模拟器可验证"
+    }
+  ],
+  "acceptance": {
+    "lockedByCritic": [
+      "共享空间体积窗口，和其它窗口并存；画完能「摆着看」",
+      "应用名不出现 Tilt Brush",
+      "笔触松手后按笔刷合批（颜色走调色板贴图），draw call ≤ 21"
+    ],
+    "mustPass": [
+      "模拟器真实拖动笔尖（注入）画出至少 1 笔，存档后 force-stop 重开还在",
+      "debug stroke helix / zigzag / circle 三条注入轨迹走同一条管线成网格，4 种笔刷各截一张",
+      "立体：画一笔 → 点「转 90°」→ 再画一笔 → 转回 0° 截图，两笔不在同一平面；再拖影子把笔尖挪到最前画一笔，然后拖影子把它挪回最后，证明前后两个方向都能放",
+      "点点阵：在 1 m 处、体积默认大小下，笔尖落点与点中处误差 ≤ 1 cm（模拟器 + debug nibInfo 打印）",
+      "对称开时一笔出两条，撤销一次两条一起消失；撤销后笔尖回到上一笔末端",
+      "撤销到空、重做到满，计数正确；新的一笔后重做灰掉",
+      "画到边界：线不越界、不累积，边界亮环出现；debug boundsCheck 任何时刻输出 0",
+      "debug fill 到上限出 S16；撤销后回 S05",
+      "作品架：横滑、点卡即打开、示例先只看画了才复制、删除确认、空作品架虚线卡",
+      "颜色与粗细展开、笔尖在最前（z 0.17）时，粗细那一行能点中（落笔面不抢）",
+      "引导三句 + 跳过；拖笔尖后 250 ms 内不触发点阵点击",
+      "中英切换后工具条、菜单、作品架、提示条无溢出（英文菜单用短词）",
+      "全 UI 无 Material / Material3"
+    ]
+  },
+  "palette": {
+    "theme": "SpatialUI vibrant + 根面 Material.Regular 玻璃",
+    "colorScheme": {
+      "fillPrimary": "inherit",
+      "fillSecondary": "inherit",
+      "fillTertiary": "inherit",
+      "fillLight": "inherit",
+      "labelPrimary": "inherit",
+      "labelPrimaryLight": "inherit",
+      "labelSecondary": "inherit",
+      "labelTertiary": "inherit",
+      "labelQuaternary": "inherit",
+      "lightenHover": "inherit",
+      "lightenPressed": "inherit",
+      "dividerLine": "inherit",
+      "interaction": "#FF8A5C",
+      "passable": "#5FD3A4",
+      "alert": "#FFB02E",
+      "error": "#FF6B5E"
+    },
+    "brandTokens": {
+      "nibCoral": "#FF8A5C",
+      "inkViolet": "#3D1F6B",
+      "baseGraphite": "#2E2C33",
+      "baseTick": "#8C8796",
+      "mirrorPlane": "rgba(255,255,255,.06)",
+      "touchPlaneDots": "rgba(255,255,255,.12)"
+    },
+    "semantic": [
+      {
+        "status": "选中 / 开着（笔刷、对称、颜色圆点展开时）、画区边界提示",
+        "color": "interaction",
+        "cue": "珊瑚色底"
+      },
+      {
+        "status": "保存成功（作品架卡片角标）",
+        "color": "passable",
+        "cue": "✓"
+      },
+      {
+        "status": "画满了",
+        "color": "alert",
+        "cue": "提示条图标"
+      },
+      {
+        "status": "打不开",
+        "color": "error",
+        "cue": "✕"
+      }
+    ],
+    "strokeColors": "12 色固定色板见 colors[]，不进 UI 主题"
+  },
+  "typography": {
+    "font": "PicoTheme.typography 角色 + 系统字体（不打包字体）",
+    "roles": {
+      "titleMedium": "作品架卡片名、确认条主句",
+      "bodyMedium": "引导气泡、提示条、菜单行",
+      "labelMedium": "笔数、日期"
+    },
+    "rule": "引导气泡 ≤ 12 个汉字 / 24 个英文字符；样稿里用 Noto Sans 示意"
+  },
+  "spatialUiMap": {
+    "brushSegment": "sui-segment-control size=small（4 个文字段：墨线 / 霓虹 / 丝带 / 速写；新手看文字比看图标准）",
+    "sizeSegment": "sui-segment-control size=small（细 / 中 / 粗，在颜色与粗细面板里）",
+    "colorButton": "sui-icon-button size=small（内容是当前色圆点，圆点大小随粗细；展开时 toggle selected）",
+    "swatch": "sui-icon-button ×12（内容是色块；当前色用 selected 态）",
+    "mirror": "sui-icon-button 可选中态（selected 属性）",
+    "undoRedo": "sui-icon-button ×2（disabled 态）",
+    "more": "sui-icon-button",
+    "confirmStrip": "sui-button ×2（体积内不用 sui-alert-dialog）",
+    "galleryCard": "可点卡片：sui-text + sui-badge + 色条（领域内容）；选中用 interaction 色描边",
+    "galleryActions": "sui-button（新画一幅 / 完成）+ sui-button 次级（删除这幅）",
+    "settingsRows": "sui-list-item + sui-switch + sui-segment-control",
+    "progress": "sui-linear-progress（加载）",
+    "hint": "sui-text bodyMedium + sui-icon-button size=min（× 跳过），放在小 AttachmentPanel 里",
+    "pill": "sui-button size=small（接着画）",
+    "custom": "底座、笔尖、影子、落笔面点阵、笔触、对称面是 3D 领域内容（ECS 实体），不是控件",
+    "turn90": "sui-icon-button size=small（转 90°）",
+    "menuRow": "sui-icon-button（返回）+ sui-button size=small ×5（一行，不长高）",
+    "galleryPager": "（不分页）卡片行用 Compose LazyRow 横向滑动，卡片是领域内容"
+  },
+  "iconSet": {
+    "rule": "全部应用内矢量图标（ImageVector），不用 emoji",
+    "ui": [
+      "ic_mirror",
+      "ic_turn90",
+      "ic_undo",
+      "ic_redo",
+      "ic_more",
+      "ic_pen",
+      "ic_back",
+      "ic_prev",
+      "ic_next",
+      "ic_close",
+      "ic_warn",
+      "ic_error"
+    ]
+  },
+  "appIcon": {
+    "concept": "一条连续的线从左下起笔、绕一个立着的圈、向右上收尾，末端一颗圆点（笔尖）。一眼看出「一笔画」和「笔尖」",
+    "glyph": "白色 #FFFFFF 单色扁平线形，线宽 = 图标宽 9%，圆头；末端圆点直径 = 线宽 × 2；不加渐变、不加阴影",
+    "background": "#3D1F6B 墨紫（Ink Violet）满底",
+    "uniqueness": "工厂已有应用里未见墨紫底；研发站出图时和已上架图标并排比一次，撞色就只调明度不换色相",
+    "deliverable": "研发站做 adaptive icon：前景 = 矢量 glyph（安全区 66%），背景 = 纯色 #3D1F6B；应用内「关于」页用同一 glyph"
+  },
+  "tags": {
+    "contentType": "应用",
+    "contentTags": [
+      "3D 绘画",
+      "创作",
+      "速写",
+      "摆件",
+      "亲子"
+    ],
+    "featureTags": [
+      "体积窗口",
+      "捏合拖动画线",
+      "程序生成网格",
+      "转底座",
+      "镜像对称",
+      "撤销重做",
+      "作品架",
+      "本地存档",
+      "全离线",
+      "中英双语"
+    ]
+  },
+  "i18n": {
+    "languages": [
+      "zh-CN",
+      "en"
+    ],
+    "default": "跟随系统",
+    "note": "UI、示例名、作品自动名（「画 3 · 10月21日」/「Sketch 3 · Oct 21」）、所有提示全部双语"
+  },
+  "offline": {
+    "network": "无网络权限",
+    "apiKeys": "无",
+    "chinaAvailability": "全部可用"
+  },
+  "verification": {
+    "emulatorCanVerify": [
+      "首次引导三句与跳过",
+      "真实拖动笔尖画线（平面内）",
+      "点点阵 / 拖影子挪笔尖（含落点误差、前后两个方向）",
+      "转底座 + 转 90° + 再画 = 立体作品",
+      "4 种笔刷 × 3 种粗细 × 12 色",
+      "对称",
+      "撤销 / 重做与笔尖回位",
+      "画区边界钳制与亮环",
+      "作品架：横滑、点卡即打开、示例、删除确认、空态",
+      "摆着看与慢转",
+      "画满了 / 打不开",
+      "存档跨 force-stop 恢复（含摆着看）",
+      "中英切换",
+      "体积边界检查"
+    ],
+    "deviceOnly": [
+      "调色板贴图 + uv0 取色在真机渲染正确（spike 第一项，阻断：不行就回设计站改合批方案）",
+      "前后（z）方向画线的手感：远距离眼手、手柄射线各画 5 笔，看 z 起伏能否控制",
+      "近场直接捏住笔尖画（手伸进体积）是否触发、是否跟手",
+      "防抖：1 m 处眼手画直线的抖动幅度（目标 ≤ 3 mm）",
+      "性能：16k 点作品在真机上画新一笔时帧率不掉（目标 72 fps 无明显掉帧，用 pico-cli perf 量）"
+    ],
+    "deviceSpike": "门 B 过后、研发站正式开工前：先出一个只有底座 + 笔尖 + 墨线 + 撤销的 spike 包，真机 1 小时量上面 5 项。判定：第 1 项不过 = STOP（回设计站改合批）；z 可控 + 近场可用 = GO（引导第 3 句加「往前推、往后拉」）；z 不可控 = LIMITED（v1 照做，引导强调转底座和点底座）；平面拖动都抖到 > 5 mm = STOP（回设计站放大笔尖 / 加强平滑）",
+    "debugHooks": "debug 构建带广播接收器：seed sample <spring|tree|orbit>、stroke <helix|zigzag|circle> [brush] [size] [color]（注入轨迹走 T1 同一条管线）、tapPlane <x> <y>、dragShadow <dx> <dz>、yaw <deg>、turn90、mirror <on|off>、undo、redo、fill、state <id>、locale <zh|en>、corruptSave、boundsCheck、nibInfo、resetOnboarding"
+  },
+  "dataModel": {
+    "storage": "应用私有目录：works/index.json + works/<id>.json；全离线",
+    "work": "{ id, nameIndex, createdAt, updatedAt, yawDeg, mirror, brush, size, color, display(bool), strokes[] }",
+    "stroke": "{ brush, size, color, mirrored(bool), faceYawDeg（丝带起笔时的朝向）, pts: int16[]（x, y, z 毫米 + 半径 0.1 mm，四个一组）}",
+    "index": "[{ id, nameIndex, updatedAt, strokeCount, colorsUsed[] }]，按 updatedAt 新的在前；没画过的作品不进索引；作品架只读 index，选中才读那一幅",
+    "samples": "assets/samples/<id>.json，同一格式，由研发写的生成脚本产出；打开示例先只读显示，画下第一笔时才复制成新作品",
+    "prefs": "language、slowSpin、onboardingDone、lastWorkId"
+  },
+  "estimate": {
+    "days": 2,
+    "split": "笔触管线（采样 / 平滑 / 管与带网格 / 主体 + 尾段 / 合批 + 调色板 / 撤销）0.9 天；工具条、作品架、存档 0.5 天；底座、落笔面、影子、对称、示例生成脚本 0.4 天；双语与 QA 钩子 0.2 天。为压在 2 天内砍掉：丝带随手柄扭、音效、作品架分页与单独预览（点卡即打开）"
+  },
+  "needsCheck": [
+    "调色板贴图 + uv0 取色：PhysicallyBasedMaterial / UnlitMaterial 设 baseColor 贴图后用 MeshModel.uv0 取色（spike 第一项）",
+    "SpatialTapValue.position 打在实体（落笔面）上时是否就是命中点（文档写「视图局部坐标」，研发核）",
+    "远距离射线 / 眼手拖动时 dragAmount.z 的来源与幅度（文档未写清，真机 spike 量）",
+    "笔尖外环能否关深度测试常显（不行就外环加大加亮）",
+    "replaceWithMeshModel 每帧调用一次的开销（尾段 ≤ 64 点 × 6 边 ≈ 768 顶点，预计可接受，研发在模拟器先测 1 分钟连续画）",
+    "同一底座上「影子圆点」与底座本体两个实体各自的拖动目标判定（targetedToEntity 区分），以及拖动 / 点一下阈值",
+    "体积缩放上下限 0.8 / 1.6 的写法（windowConstraints / ContainerResizeRestriction 在 Volumetric 上，研发核）"
+  ],
+  "terminology": {
+    "rule": "界面只用：画、笔尖（光点）、点阵、笔刷、颜色、粗细、对称、撤销、底座、作品、摆着看。不出现「网格」「顶点」「合批」「体积」「Z 轴」",
+    "map": {
+      "Volume": "（不说）",
+      "Mirror": "对称",
+      "Sketchbook": "作品架",
+      "Nib / cursor": "笔尖（光点）",
+      "Turntable": "底座"
+    }
+  },
+  "openQuestions": [
+    "前后方向（z）在远距离输入下能不能画好，只有真机 spike 能回答；本包按 LIMITED 也成立来设计（转底座 + 点底座出立体），门 B 不需要为此停下"
+  ],
+  "reviewNotes": [
+    "R0-1（设计时，偏离池文档）：池文档写「非惯用手悬浮 SpatialUI 调色盘」。体积窗口拿不到手 / 手柄持续位姿（池文档批评 2 原话：IN_VOLUME 拿不到 provider 持续位姿），跟手调色盘做不了 → 调色盘放进体积内工具条，点开向上长高",
+    "R0-2（设计时）：拖动手势不给起点位置，「在哪捏就从哪画」做不到确定 → 引入「笔尖」光点：捏住笔尖拖 = 画，点背板 = 挪笔尖。笔尖也是本应用的签名元素",
+    "R0-3（设计时）：模拟器手不能沿 Z 走 → 加「转底座」：平面输入 + 转 90° 再画也能出立体作品；这让核心价值在模拟器可验，z 手感降为增强项",
+    "2026-10-21 评审第 1 轮（reviewer 子 agent，对照 Open Brush / A-Painter + 本地叠木 / 空间尺 / 家具试摆代码）：revise，6 P1 + 8 P2 + 6 P3，处理如下：",
+    "R1-1 P1 背板在 z −0.20、命中点投到 z 0 有视差：删背板，改成「落笔面」跟着笔尖深度走，点中处就是落点，没有视差",
+    "R1-2 P1 换下笔处只能回 z 0，模拟器画不出前后：底座顶面也接点一下（改前后左右、高度不变），点阵改上下左右、深度不变；两次点能到画区任意点",
+    "R1-3 P1 引导第 2 句时点阵已隐去：点阵改为常显在笔尖周围（径向渐隐），引导第 2 步期间画着也不隐",
+    "R1-4 P1 转底座只有 3 cm 外缘、会被工具条挡：整个底座（顶面 + 侧面）都接拖动；工具条加「转 90°」按钮兜底，模拟器可确定性验；工具条加宽到 640 dp（0.52 m）",
+    "R1-5 P1 draw call 锁定 ≤ 23 与顶点色兜底冲突：主方案改为每种笔刷一张 12×1 调色板贴图 + uv0 取色，合批数只跟笔刷有关；列为 spike 第一项阻断",
+    "R1-6 P1 dragAmount 语义与体积缩放未写：写明增量、÷ 体积缩放、钳边不累积",
+    "R1-7 P2 钳边无反馈：钳边时停记点 + 边界亮环",
+    "R1-8 P2 笔尖被挡 / 埋进作品：撤销后回上一笔末端、打开作品放在前面 z 0.10、外环加亮并尽量常显，加笔尖投影",
+    "R1-9 P2 作品架：一页 3 张 + 翻页、按更新时间排序、预览 300 ms 防抖 + 加载环、示例画了才复制、空作品不进索引；面板改为替换工具条（0.20 m 高），接受遮住作品底部约 1/5",
+    "R1-10 P2 开关当状态：S07 / S09 改为标记态；每个模态写明 3D 手势是否可用（S10 / S12 / S16 可转底座，S11 / S13 / S15 不可；S06 里 3D 手势照常并收起面板）",
+    "R1-11 P2 正在画的一笔实体数超预算：改为主体 + 尾段两个实体",
+    "R1-12 P2 引导气泡越界：笔尖 y > 0.50 时放下方，x 钳在体积内",
+    "R1-13 P2 工时偏乐观：砍掉丝带随手柄扭与音效，保持 2 天",
+    "R1-14 P2「立在桌上」做不到 + 拖后幽灵点击：文案改「挪到桌边」，引导末尾提示一次拖窗口；拖完 250 ms 内的点一下忽略",
+    "R1-15 P3：默认天蓝 + 墨线 + 中；笔刷分段用文字；笔尖大小随粗细；删「显示文字」；摆着看跨重启保留；引导气泡加 × 跳过",
+    "2026-10-21 评审第 2 轮（同一 reviewer）：revise，1 P1 + 3 P2 + 2 P3，全部采纳：",
+    "R2-1 P1 整块落笔面挡住底座后半、笔尖挪到前面就挪不回：落笔面碰撞体缩成和点阵一样大的 Ø 0.32 m 圆（下沿 ≥ 笔尖 y − 0.10）；「点底座」改为「拖底座上的影子圆点」前后左右挪笔尖（增量，不靠命中点、不会被挡）；mustPass 加「挪到最前再挪回最后」",
+    "R2-2 P2 落笔面与气泡 / 展开面板抢点击：气泡朝用户偏 3 cm；颜色与粗细、作品架、设置展开时落笔面碰撞体关掉；mustPass 加一条",
+    "R2-3 P2 合批 ≤ 8 守不住：单批上限提到 60k 顶点（每种笔刷 1–2 批）；写明镜像点算进 16k",
+    "R2-4 P2 工时：作品架去掉分页和单独预览（点卡即打开、横向滑动），保持 2 天",
+    "R2-5 P3 清掉「背板」旧说法；brandTokens 改名 touchPlaneDots",
+    "R2-6 P3 英文菜单定短词，放不下「设置」收成图标",
+    "评审到此两轮结束；无遗留未决项进门 B（只有真机 spike 的 z 手感，见 openQuestions）"
+  ],
+  "changes": [],
+  "defaults": {
+    "brush": "ink 墨线",
+    "size": "中",
+    "color": "sky 天蓝 #3FA7F5",
+    "mirror": "关",
+    "rule": "笔刷、粗细、颜色、对称按作品存；新画一幅沿用上一幅的设置"
+  }
+}
