@@ -8,10 +8,11 @@ A little turntable on your desk: pinch the glowing nib and drag to draw a line i
 
 ![Poster](docs/media/poster.png)
 
-> **当前状态 / Status (v0.1.0, 2026-10-23 草稿 draft)**
+> **当前状态 / Status (v0.1.0, 2026-10-26 发布 released)**
 >
+> - 门 C 人工验收已放行，Release v0.1.0 为正式版本（debug 签名）。Gate C passed; v0.1.0 is a published release (debug-signed).
 > - 模拟器 QA 第 1 轮通过：Material 门禁 0 命中，装机后 60 秒 0 崩溃，17 个设计状态全有截图，真实注入的捏住拖动能画、存档 force-stop 后还在。Emulator QA round 1 passed: no Material, no crash in 60 s, all 17 design states captured, injected pinch-drag draws and survives a force-stop.
-> - 已装到头显（同一个 APK），但还没戴上测：**画线手感、真摇杆依赖真机验证**（见下文「真机依赖」）。Installed on a headset (same APK) but not yet tried on: **drawing feel and the real thumbstick depend on a device check** (see "Device-dependent").
+> - 同一个 APK 已装到头显并能正常启动；画线手感、真摇杆等细项见下文「真机依赖」。The same APK is installed on a headset and launches normally; drawing feel, the real thumbstick and other details are listed under "Device-dependent".
 > - 截图和视频都来自 PICO 6.1 模拟器，由调试命令和模拟器输入驱动，**不是真实手势录像**。Screenshots and video come from the PICO 6.1 emulator, driven by debug commands and injected input. **This is not a recording of real hand gestures.**
 
 ## 截图 Screenshots
